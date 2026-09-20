@@ -10,7 +10,10 @@
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
-    "moduleResolution": "Node",
+    "moduleResolution": "Bundler",
+    // vite/client dostarcza typ import.meta.env, używany w src/lib/api.ts.
+    // Bez niego build padał na TS2339: Property 'env' does not exist.
+    "types": ["vite/client"],
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,

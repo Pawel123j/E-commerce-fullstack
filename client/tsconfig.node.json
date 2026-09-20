@@ -1,9 +1,19 @@
 {
   "compilerOptions": {
     "composite": true,
+    "target": "ES2022",
+    // Bez "lib" ten projekt kompilował się z domyślną biblioteką ES5, więc
+    // typy Vite (Map, Set, Symbol) nie istniały i build padał na plikach
+    // w node_modules, a nie na kodzie repozytorium.
+    "lib": ["ES2023"],
     "module": "ESNext",
-    "moduleResolution": "Node",
-    "allowSyntheticDefaultImports": true
+    "moduleResolution": "Bundler",
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    // Projekt złożony (composite) nie może mieć noEmit — TS6310. Emitujemy
+    // tylko informacje o budowie, do katalogu ignorowanego przez git.
+    "outDir": "./node_modules/.tmp/tsconfig-node"
   },
   "include": ["vite.config.ts"]
 }
