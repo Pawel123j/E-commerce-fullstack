@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { pathToFileURL } from 'node:url';
 import express from 'express';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
@@ -9,7 +10,31 @@ import { z } from 'zod';
 const prisma = new PrismaClient();
 const app = express();
 const port = Number(process.env.PORT || 3000);
-const jwtSecret = process.env.JWT_SECRET || 'super-secret-shopflow';
+/**
+ * Sekret podpisujący tokeny. Bez wartości domyślnej — i to jest celowe.
+ *
+ * Wcześniej stało tu `process.env.JWT_SECRET || 'super-secret-shopflow'`.
+ * Ten sam ciąg był w .env.example, czyli w repozytorium publicznym: każdy, kto
+ * je przeczytał, mógł podpisać token administratora dla wdrożenia, które
+ * zapomniało ustawić zmiennej. Aplikacja startowała wtedy bez ostrzeżenia.
+ *
+ * Teraz brak konfiguracji zatrzymuje proces zamiast po cichu przyjąć klucz
+ * znany całemu światu.
+ */
+const jwtSecret = (() => {
+  const secret = process.env.JWT_SECRET?.trim();
+  if (!secret) {
+    console.error(
+      '\nJWT_SECRET nie jest ustawiony.\n\n' +
+        'Wygeneruj własny i zapisz w server/.env:\n' +
+        "  node -e \"console.log(require('crypto').randomBytes(48).toString('base64url'))\"\n\n" +
+        'Nie ma wartości domyślnej: sekret zapisany w kodzie jest publiczny ' +
+        'razem z repozytorium.\n'
+    );
+    process.exit(1);
+  }
+  return secret;
+})();
 const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
 
 app.use(cors({ origin: clientUrl }));
@@ -175,12 +200,34 @@ app.post('/api/orders', auth, async (req, res) => {
     return res.status(400).json({ message: 'One or more products are missing' });
   }
 
+  // Braki magazynowe sprawdzamy PRZED budową zamówienia i zwracamy 400.
+  //
+  // Wcześniej był tu `throw` w środku .map() w asynchronicznym handlerze.
+  // Express 4 nie łapie odrzuconych promes z handlerów async, więc zamiast
+  // czytelnego błędu powstawał unhandled rejection: klient nie dostawał
+  // ŻADNEJ odpowiedzi i wisiał do timeoutu, a proces logował ostrzeżenie.
+  // Zamówienie na więcej sztuk, niż jest na stanie, to zwykły błąd
+  // użytkownika — należy mu się 400 z informacją, czego zabrakło.
+  const insufficient = parsed.data.items
+    .map((item) => ({ item, product: products.find((p) => p.id === item.productId)! }))
+    .filter(({ item, product }) => product.stock < item.quantity)
+    .map(({ item, product }) => ({
+      productId: product.id,
+      name: product.name,
+      requested: item.quantity,
+      available: product.stock,
+    }));
+
+  if (insufficient.length > 0) {
+    return res.status(400).json({
+      message: 'One or more products do not have enough stock',
+      items: insufficient,
+    });
+  }
+
   let subtotal = 0;
   const orderItemsInput = parsed.data.items.map((item) => {
     const product = products.find((p) => p.id === item.productId)!;
-    if (product.stock < item.quantity) {
-      throw new Error(`Product ${product.name} does not have enough stock`);
-    }
     const total = product.price * item.quantity;
     subtotal += total;
     return {
@@ -301,6 +348,17 @@ app.get('/api/admin/orders', auth, adminOnly, async (_req, res) => {
   res.json({ orders });
 });
 
-app.listen(port, () => {
-  console.log(`ShopFlow API listening on http://localhost:${port}`);
-});
+// `app` jest eksportowane, żeby testy mogły uderzać w router bez otwierania
+// portu. Serwer startuje tylko wtedy, gdy ten plik jest punktem wejścia
+// procesu — pod supertestem import nie wywołuje listen().
+export { app, prisma };
+
+const isEntryPoint =
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isEntryPoint) {
+  app.listen(port, () => {
+    console.log(`ShopFlow API listening on http://localhost:${port}`);
+  });
+}
