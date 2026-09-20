@@ -32,5 +32,11 @@
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vitest": "^5.0.1"
+  },
+  "overrides": {
+    "effect": "^3.20.0",
+    "deepmerge-ts": "^8.0.0",
+    "qs": "^6.16.0",
+    "esbuild": "^0.28.1"
   }
 }
