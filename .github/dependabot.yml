@@ -1,0 +1,20 @@
+# Aktualizacje zależności. Dwa osobne katalogi, bo to dwa niezależne
+# package.json (serwer i klient), plus same akcje GitHuba.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /server
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: /client
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
