@@ -34,6 +34,27 @@ Sześć encji w [`server/prisma/schema.prisma`](server/prisma/schema.prisma):
 `User`, `Category`, `Product`, `Coupon`, `Order`, `OrderItem` — z enumami
 `Role` i `CouponType`, relacjami i unikalnymi slugami.
 
+## Zrzuty ekranu
+
+Zrzuty z działającej lokalnie aplikacji (dane z `npm run seed` plus jedno
+zamówienie złożone przez API z kuponem `WELCOME10`).
+
+**Historia zamówień klienta:** pozycje, ceny i suma po rabacie (787 zł − 10% = 708,30 zł).
+
+![Historia zamówień](docs/screenshots/account-orders.png)
+
+**Panel administratora:** statystyki, formularz dodawania produktu, stany
+magazynowe i ostatnie zamówienia. Stany Orbit Keyboard (9 → 8) i Glow Desk
+Lamp (24 → 22) są już po checkoutcie: zamówienie zdejmuje towar z magazynu
+w tej samej transakcji.
+
+![Panel administratora](docs/screenshots/admin-dashboard.png)
+
+> Widoków z grafiką produktów (strona główna, katalog, karta produktu, koszyk)
+> tu nie ma. Zdjęcia ładują się z `images.unsplash.com`, a środowisko, w którym
+> robiono zrzuty, blokowało ten host. Zamiast wstawiać podmienione obrazki,
+> pomijam te widoki.
+
 ## Uruchomienie
 
 Wymagany Node 20+. Polecenia są takie same na Linuksie, macOS i Windows
