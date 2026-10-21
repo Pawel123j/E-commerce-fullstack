@@ -4,12 +4,15 @@ import { api } from '../lib/api';
 import { useAuth } from '../state/AuthContext';
 import { useCart } from '../state/CartContext';
 
+type Coupon = { code: string; type: 'PERCENT' | 'FIXED'; value: number; minTotal: number; active: boolean };
+
 export function CartPage() {
   const { items, removeItem, updateQuantity, subtotal, clear } = useCart();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [couponCode, setCouponCode] = useState('WELCOME10');
   const [couponInfo, setCouponInfo] = useState<string>('');
+  const [coupon, setCoupon] = useState<Coupon | null>(null);
   const [shippingName, setShippingName] = useState(user?.name || '');
   const [shippingEmail, setShippingEmail] = useState(user?.email || '');
   const [shippingAddress, setShippingAddress] = useState('Kraków, ul. Demo 10/5');
@@ -17,20 +20,20 @@ export function CartPage() {
   const [error, setError] = useState('');
 
   const discount = useMemo(() => {
-    if (couponCode.trim().toUpperCase() === 'WELCOME10' && subtotal >= 300) {
-      return subtotal * 0.1;
-    }
-    return 0;
-  }, [couponCode, subtotal]);
+    if (!coupon?.active || coupon.code !== couponCode.trim().toUpperCase() || subtotal < coupon.minTotal) return 0;
+    return Math.min(subtotal, coupon.type === 'PERCENT' ? subtotal * coupon.value / 100 : coupon.value);
+  }, [coupon, couponCode, subtotal]);
 
   const total = subtotal - discount;
 
   const validateCoupon = async () => {
     try {
       const { data } = await api.get(`/coupons/${couponCode.trim()}`);
+      setCoupon(data.coupon);
       setCouponInfo(`${data.coupon.code}: ${data.coupon.type === 'PERCENT' ? `${data.coupon.value}% off` : `${data.coupon.value} zł off`}`);
       setError('');
     } catch (err: any) {
+      setCoupon(null);
       setCouponInfo('');
       setError(err?.response?.data?.message || 'Coupon not found');
     }
@@ -50,7 +53,7 @@ export function CartPage() {
     try {
       await api.post('/orders', {
         items: items.map((item) => ({ productId: item.product.id, quantity: item.quantity })),
-        couponCode: couponCode.trim() || undefined,
+        couponCode: coupon?.code === couponCode.trim().toUpperCase() ? coupon.code : undefined,
         shippingName,
         shippingEmail,
         shippingAddress,
@@ -85,6 +88,7 @@ export function CartPage() {
                 <div className="cart-actions-row">
                   <input
                     className="input quantity-input"
+                    aria-label={`Quantity for ${item.product.name}`}
                     type="number"
                     min={1}
                     max={item.product.stock}
@@ -103,10 +107,15 @@ export function CartPage() {
           <div className="card">
             <h3>Coupon</h3>
             <div className="inline-form compact-top">
-              <input className="input" value={couponCode} onChange={(e) => setCouponCode(e.target.value)} />
+              <input aria-label="Coupon code" className="input" value={couponCode} onChange={(e) => {
+                setCouponCode(e.target.value);
+                setCoupon(null);
+                setCouponInfo('');
+              }} />
               <button className="button secondary" onClick={validateCoupon}>Check</button>
             </div>
             {couponInfo ? <p className="success-text">{couponInfo}</p> : null}
+            {coupon && subtotal < coupon.minTotal ? <p className="muted">Minimum subtotal: {coupon.minTotal.toFixed(2)} zł</p> : null}
           </div>
 
           <div className="card">

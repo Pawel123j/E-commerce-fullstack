@@ -15,7 +15,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 const workDir = mkdtempSync(join(tmpdir(), 'shopflow-test-'));
 const databaseUrl = `file:${join(workDir, 'test.db')}`;
@@ -46,7 +46,7 @@ const SHIPPING = {
 
 beforeAll(async () => {
   // Schemat + dane startowe na świeżej bazie.
-  execSync('npx prisma db push --skip-generate', {
+  execSync('npx prisma migrate deploy', {
     cwd: join(import.meta.dirname, '..'),
     env: { ...process.env, DATABASE_URL: databaseUrl },
     stdio: 'pipe',
@@ -63,6 +63,34 @@ beforeAll(async () => {
   const product = await prisma.product.findFirst({ where: { stock: { gt: 5 } } });
   productSlug = product!.slug;
   productId = product!.id;
+});
+
+it('nie sprzedaje ostatniej sztuki dwóm klientom równocześnie', async () => {
+  const category = await prisma.category.findFirstOrThrow();
+  const product = await prisma.product.create({ data: {
+    name: 'Last item', slug: 'last-item-regression', description: 'Concurrency regression',
+    price: 50, imageUrl: 'https://example.com/product.png', stock: 1, categoryId: category.id,
+  } });
+  const responses = await Promise.all([1, 2].map(() => request(app).post('/api/orders')
+    .set('Authorization', `Bearer ${adminToken}`)
+    .send({ items: [{ productId: product.id, quantity: 1 }], ...SHIPPING })));
+  expect(responses.filter((res) => res.status === 201)).toHaveLength(1);
+  expect(responses.filter((res) => [400, 409].includes(res.status))).toHaveLength(1);
+  expect((await prisma.product.findUniqueOrThrow({ where: { id: product.id } })).stock).toBe(0);
+  expect(await prisma.orderItem.count({ where: { productId: product.id } })).toBe(1);
+  await prisma.order.deleteMany({ where: { items: { some: { productId: product.id } } } });
+  await prisma.product.delete({ where: { id: product.id } });
+});
+
+it('zwraca bezpieczny błąd JSON przy awarii bazy zamiast zawieszać żądanie', async () => {
+  const failure = vi.spyOn(prisma.product, 'findMany').mockRejectedValueOnce(new Error('private database details'));
+  try {
+    const response = await request(app).get('/api/products').timeout(1500);
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ message: 'Internal server error' });
+  } finally {
+    failure.mockRestore();
+  }
 });
 
 afterAll(async () => {
@@ -86,6 +114,7 @@ describe('auth', () => {
     const res = await request(app).post('/api/auth/register').send(CUSTOMER);
 
     expect(res.status).toBe(201);
+    expect(res.headers['ratelimit-policy']).toBeTruthy();
     expect(res.body.token).toBeTruthy();
     expect(res.body.user.role).toBe('USER');
     // Hasło nie może wrócić w odpowiedzi w żadnej postaci.

@@ -9,3 +9,10 @@ server/dist
 server/prisma/dev.db
 server/prisma/dev.db-journal
 *.tsbuildinfo
+
+# Browser test outputs
+e2e/artifacts/
+e2e/__pycache__/
+.pytest_cache/
+
+.venv-e2e/

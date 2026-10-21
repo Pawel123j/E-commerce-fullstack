@@ -4,8 +4,9 @@ import express from 'express';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import { PrismaClient, CouponType, Role } from '@prisma/client';
+import { PrismaClient, Prisma, CouponType, Role } from '@prisma/client';
 import { z } from 'zod';
+import { authRateLimit } from './authRateLimit.js';
 
 const prisma = new PrismaClient();
 const app = express();
@@ -50,6 +51,13 @@ declare global {
   }
 }
 
+// Express 4 does not forward rejected async handlers to error middleware.
+function asyncHandler(handler: (req: express.Request, res: express.Response) => Promise<unknown>): express.RequestHandler {
+  return (req, res, next) => { Promise.resolve(handler(req, res)).catch(next); };
+}
+
+class StockConflict extends Error {}
+
 function signToken(user: RequestUser) {
   return jwt.sign(user, jwtSecret, { expiresIn: '7d' });
 }
@@ -84,7 +92,7 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', authRateLimit(10, 60 * 60 * 1000), asyncHandler(async (req, res) => {
   const schema = z.object({
     name: z.string().min(2),
     email: z.string().email(),
@@ -112,9 +120,9 @@ app.post('/api/auth/register', async (req, res) => {
 
   const safeUser = { id: user.id, name: user.name, email: user.email, role: user.role };
   return res.status(201).json({ token: signToken({ id: user.id, email: user.email, role: user.role }), user: safeUser });
-});
+}));
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authRateLimit(20, 15 * 60 * 1000, true), asyncHandler(async (req, res) => {
   const schema = z.object({
     email: z.string().email(),
     password: z.string().min(1),
@@ -136,22 +144,22 @@ app.post('/api/auth/login', async (req, res) => {
 
   const safeUser = { id: user.id, name: user.name, email: user.email, role: user.role };
   return res.json({ token: signToken({ id: user.id, email: user.email, role: user.role }), user: safeUser });
-});
+}));
 
-app.get('/api/auth/me', auth, async (req, res) => {
+app.get('/api/auth/me', auth, asyncHandler(async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
   if (!user) {
     return res.status(404).json({ message: 'User not found' });
   }
   res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role } });
-});
+}));
 
-app.get('/api/categories', async (_req, res) => {
+app.get('/api/categories', asyncHandler(async (_req, res) => {
   const categories = await prisma.category.findMany({ orderBy: { name: 'asc' } });
   res.json({ categories });
-});
+}));
 
-app.get('/api/products', async (req, res) => {
+app.get('/api/products', asyncHandler(async (req, res) => {
   const featured = req.query.featured === 'true';
   const products = await prisma.product.findMany({
     where: featured ? { featured: true } : undefined,
@@ -159,9 +167,10 @@ app.get('/api/products', async (req, res) => {
     orderBy: { createdAt: 'desc' },
   });
   res.json({ products: products.map(presentProduct) });
-});
+}));
 
-app.get('/api/products/:slug', async (req, res) => {
+app.get('/api/products/:slug', asyncHandler(async (req, res) => {
+  if (typeof req.params.slug !== 'string') return res.status(400).json({ message: 'Invalid slug' });
   const product = await prisma.product.findUnique({
     where: { slug: req.params.slug },
     include: { category: true },
@@ -170,18 +179,19 @@ app.get('/api/products/:slug', async (req, res) => {
     return res.status(404).json({ message: 'Product not found' });
   }
   res.json({ product: presentProduct(product) });
-});
+}));
 
-app.get('/api/coupons/:code', async (req, res) => {
+app.get('/api/coupons/:code', asyncHandler(async (req, res) => {
+  if (typeof req.params.code !== 'string') return res.status(400).json({ message: 'Invalid coupon code' });
   const code = req.params.code.toUpperCase();
   const coupon = await prisma.coupon.findUnique({ where: { code } });
   if (!coupon || !coupon.active) {
     return res.status(404).json({ message: 'Coupon not found' });
   }
   res.json({ coupon });
-});
+}));
 
-app.post('/api/orders', auth, async (req, res) => {
+app.post('/api/orders', auth, asyncHandler(async (req, res) => {
   const schema = z.object({
     items: z.array(z.object({ productId: z.number().int().positive(), quantity: z.number().int().min(1) })).min(1),
     couponCode: z.string().optional(),
@@ -269,32 +279,35 @@ app.post('/api/orders', auth, async (req, res) => {
       });
 
       for (const item of parsed.data.items) {
-        const product = products.find((p) => p.id === item.productId)!;
-        await tx.product.update({
-          where: { id: product.id },
-          data: { stock: product.stock - item.quantity },
+        const reserved = await tx.product.updateMany({
+          where: { id: item.productId, stock: { gte: item.quantity } },
+          data: { stock: { decrement: item.quantity } },
         });
+        if (reserved.count !== 1) throw new StockConflict();
       }
 
       return createdOrder;
     });
 
     res.status(201).json({ order });
-  } catch (error: any) {
-    res.status(400).json({ message: error.message || 'Could not create order' });
+  } catch (error) {
+    if (error instanceof StockConflict) {
+      return res.status(409).json({ message: 'Stock changed. Please review your cart and try again.' });
+    }
+    throw error;
   }
-});
+}));
 
-app.get('/api/orders/my', auth, async (req, res) => {
+app.get('/api/orders/my', auth, asyncHandler(async (req, res) => {
   const orders = await prisma.order.findMany({
     where: { userId: req.user!.id },
     include: { items: true },
     orderBy: { createdAt: 'desc' },
   });
   res.json({ orders });
-});
+}));
 
-app.get('/api/admin/stats', auth, adminOnly, async (_req, res) => {
+app.get('/api/admin/stats', auth, adminOnly, asyncHandler(async (_req, res) => {
   const [products, users, orders] = await Promise.all([
     prisma.product.count(),
     prisma.user.count(),
@@ -302,17 +315,17 @@ app.get('/api/admin/stats', auth, adminOnly, async (_req, res) => {
   ]);
   const revenue = orders.reduce((sum, order) => sum + order.total, 0);
   res.json({ stats: { products, users, orders: orders.length, revenue } });
-});
+}));
 
-app.get('/api/admin/products', auth, adminOnly, async (_req, res) => {
+app.get('/api/admin/products', auth, adminOnly, asyncHandler(async (_req, res) => {
   const products = await prisma.product.findMany({
     include: { category: true },
     orderBy: { createdAt: 'desc' },
   });
   res.json({ products: products.map(presentProduct) });
-});
+}));
 
-app.post('/api/admin/products', auth, adminOnly, async (req, res) => {
+app.post('/api/admin/products', auth, adminOnly, asyncHandler(async (req, res) => {
   const schema = z.object({
     name: z.string().min(2),
     slug: z.string().min(2),
@@ -338,15 +351,27 @@ app.post('/api/admin/products', auth, adminOnly, async (req, res) => {
     include: { category: true },
   });
   res.status(201).json({ product: presentProduct(product) });
-});
+}));
 
-app.get('/api/admin/orders', auth, adminOnly, async (_req, res) => {
+app.get('/api/admin/orders', auth, adminOnly, asyncHandler(async (_req, res) => {
   const orders = await prisma.order.findMany({
     include: { items: true },
     orderBy: { createdAt: 'desc' },
   });
   res.json({ orders });
-});
+}));
+
+const errorHandler: express.ErrorRequestHandler = (error, _req, res, _next) => {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === 'P2002') return res.status(409).json({ message: 'Resource already exists' });
+    if (error.code === 'P2003') return res.status(400).json({ message: 'Referenced resource does not exist' });
+  }
+  if (error instanceof SyntaxError && 'status' in error && error.status === 400) {
+    return res.status(400).json({ message: 'Invalid JSON payload' });
+  }
+  return res.status(500).json({ message: 'Internal server error' });
+};
+app.use(errorHandler);
 
 // `app` jest eksportowane, żeby testy mogły uderzać w router bez otwierania
 // portu. Serwer startuje tylko wtedy, gdy ten plik jest punktem wejścia

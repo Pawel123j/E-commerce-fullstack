@@ -71,3 +71,44 @@ jobs:
 
       - name: Build produkcyjny
         run: npm run build
+
+  browser:
+    name: Checkout browser regression
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            client/package-lock.json
+      - name: Build backend
+        working-directory: server
+        run: |
+          npm ci
+          npx prisma generate
+          npm run build
+      - name: Build frontend for isolated API
+        working-directory: client
+        env:
+          VITE_API_URL: http://127.0.0.1:18311/api
+        run: |
+          npm ci
+          npm run build
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install browser test dependencies
+        run: |
+          python -m pip install -r e2e/requirements.txt
+          python -m playwright install --with-deps chromium
+      - name: Browser regression tests
+        run: python -m pytest -q e2e --junitxml=e2e/artifacts/results.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-test-results
+          path: e2e/artifacts/

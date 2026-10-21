@@ -37,6 +37,7 @@ export function ProductPage() {
             <label>Quantity</label>
             <input
               className="input quantity-input"
+              aria-label="Quantity"
               type="number"
               min={1}
               max={product.stock}
