@@ -271,6 +271,17 @@ describe('zamówienia', () => {
     expect(res.status).toBe(400);
   });
 
+  it.each([
+    { items: null }, { items: {} }, { items: [{ productId: 1, quantity: 0 }] },
+    { items: [{ productId: 1, quantity: 1.5 }] }, { items: [{ productId: "1", quantity: 1 }] },
+  ])('odrzuca nieprawidłowe pozycje po aktualizacji Zod: %j', async ({ items }) => {
+    const response = await request(app).post('/api/orders')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ items, ...SHIPPING });
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ message: 'Invalid order payload' });
+  });
+
   it('kupon obniża sumę zamówienia', async () => {
     const withoutCoupon = await request(app)
       .post('/api/orders')

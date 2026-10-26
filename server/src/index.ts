@@ -39,7 +39,7 @@ const jwtSecret = (() => {
 const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
 
 app.use(cors({ origin: clientUrl }));
-app.use(express.json());
+app.use(express.json({ limit: '100kb' }));
 
 type RequestUser = { id: number; role: Role; email: string };
 
@@ -368,6 +368,19 @@ const errorHandler: express.ErrorRequestHandler = (error, _req, res, _next) => {
   }
   if (error instanceof SyntaxError && 'status' in error && error.status === 400) {
     return res.status(400).json({ message: 'Invalid JSON payload' });
+  }
+  // Preserve body-parser's client-error statuses without exposing raw input or
+  // decompression details. These failures must not become generic HTTP 500s.
+  if (error?.type === 'entity.too.large') {
+    return res.status(413).json({ message: 'Request body too large' });
+  }
+  if (error?.type === 'encoding.unsupported' || error?.type === 'charset.unsupported') {
+    return res.status(415).json({ message: 'Unsupported request encoding' });
+  }
+  if (error?.type === 'entity.parse.failed' || error?.type === 'request.size.invalid' ||
+      error?.type === 'request.aborted' ||
+      (error?.status === 400 && ['Z_DATA_ERROR', 'Z_BUF_ERROR'].includes(error?.code))) {
+    return res.status(400).json({ message: 'Invalid request body' });
   }
   return res.status(500).json({ message: 'Internal server error' });
 };

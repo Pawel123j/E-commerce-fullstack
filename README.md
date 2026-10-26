@@ -148,8 +148,10 @@ między użytkownikami.
 
 ## Zależności i bezpieczeństwo
 
-`npm audit` zwraca **0 podatności** w obu pakietach. Żeby to osiągnąć, w
-`server/package.json` jest blok `overrides`:
+Wynik `npm audit` zależy od bieżącej bazy zgłoszeń. Backend używa Express 4.22.3
+z body-parser 1.20.9, Zod 4.6.7 i Vitest 5.0.5; jego lokalny audit z 26.10.2026
+zwrócił 0 zgłoszeń. Node 24 obowiązuje także w backendowym CI. W
+`server/package.json` pozostaje blok `overrides`:
 
 | Paczka | Wymuszona wersja | Dlaczego |
 |---|---|---|
