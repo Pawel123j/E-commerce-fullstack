@@ -14,7 +14,7 @@ i bez zewnętrznej bazy** — Prisma na SQLite.
 | Baza | Prisma ORM + SQLite |
 | Uwierzytelnianie | JWT (`jsonwebtoken`) + bcrypt |
 | Walidacja | Zod na granicy API |
-| Testy | Vitest + supertest — 34 testy endpointów |
+| Testy | Vitest + supertest — 37 testów API; Node test + JSDOM — 29 regresji providerów klienta |
 
 ## Co jest w środku
 
@@ -57,7 +57,7 @@ w tej samej transakcji.
 
 ## Uruchomienie
 
-Wymagany Node 20+. Polecenia są takie same na Linuksie, macOS i Windows
+Wymagany Node 24 LTS (co najmniej 24.15). Polecenia są takie same na Linuksie, macOS i Windows
 (PowerShell) — jedyną różnicą jest sposób kopiowania pliku `.env`.
 
 ### 1. Backend
@@ -255,3 +255,38 @@ Zaktualizowano m.in. `proxy-addr` do 2.0.8 i `source-map-js` do 1.2.2. Audyt npm
 API ogranicza rejestrację do 10 prób na godzinę, a nieudane logowania do 20 na 15 minut na adres klienta; odpowiedź 429 zawiera informację o ponowieniu. Nie ufa przekazanym przez klienta nagłówkom X-Forwarded-For. Liczniki są w pamięci pojedynczego procesu — wiele instancji wymaga wspólnego magazynu i jawnej konfiguracji zaufanych proxy.
 
 37 testów API obejmuje konkurencję stock oraz limitowanie/wygaśnięcie limitu. E2E na nowej bazie wykonuje migracje dwukrotnie, rejestrację, rzeczywisty kupon, checkout i reload zamówienia; axe sprawdza rejestrację, koszyk i konto. Pola ilości mają dostępne nazwy. Czyste instalacje, oba buildy i audit 0 potwierdzono lokalnie. Płatność pozostaje demonstracyjna; nie przeprowadzono rzeczywistego obciążenia konta ani wdrożenia.
+
+## Odporność koszyka i sesji — 2026-10-25
+
+Koszyk sprawdza strukturę odczytanych produktów, ceny, całkowite ilości i sumy.
+Uszkodzony zapis pozostaje pod dotychczasowym kluczem `shopflow_cart`; aplikacja
+nie zastępuje go automatycznie pustym koszykiem. Gdy odczyt lub zapis przeglądarki
+jest niedostępny, widoczny komunikat informuje o pracy wyłącznie w bieżącej karcie.
+Zmiany takiego koszyka nie przetrwają przeładowania; poprzedni zapis zostaje
+zachowany do odzyskania. Zwykły zapis działa po poprawnym odczycie i zmianie koszyka.
+
+Logowanie może działać w pamięci mimo zablokowanego storage. Żądania API używają
+aktualnej sesji, a nie starego tokenu pozostawionego przez nieudany zapis.
+Jeżeli przeglądarka odmawia usunięcia tokenu przy wylogowaniu, aplikacja kończy
+sesję tej karty i ostrzega, że zapisane logowanie może powrócić po przeładowaniu.
+Przed udostępnieniem urządzenia należy wtedy wyczyścić dane tej witryny w ustawieniach
+przeglądarki. Spóźniona odpowiedź API nie przywraca sesji zakończonej przez użytkownika.
+Zmiana logowania w innej karcie kończy lokalną sesję zamiast cicho podmieniać konto.
+
+Regresje działają bez prawdziwej przeglądarki i bez serwera API:
+
+```bash
+cd client
+npm ci
+npm test
+npm run typecheck
+npm run build
+npm audit --audit-level=high
+```
+
+29 testów wykonuje rzeczywiste providery React, interceptor Axios oraz komunikaty
+aplikacji w JSDOM. Adapter HTTP i storage są kontrolowane przez testy; ten wynik
+nie zastępuje checkout E2E z prawdziwym API. Czyste `npm ci`, testy, kontrola typów,
+build i audit klienta (0 zgłoszeń) zweryfikowano 25.10.2026. Zaktualizowane drzewo
+klienta zawiera Vite 6.4.5 oraz poprawione `follow-redirects`; poprzednie wyniki
+bezpieczeństwa w starszych sekcjach opisują wyłącznie ich daty wykonania.

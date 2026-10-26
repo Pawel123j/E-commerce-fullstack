@@ -1,5 +1,6 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { CartItem, Product } from '../types';
+import { cartStorageKey, loadCart, validCart, validProduct } from './cartStorage';
 
 type CartContextValue = {
   items: CartItem[];
@@ -9,38 +10,48 @@ type CartContextValue = {
   clear: () => void;
   count: number;
   subtotal: number;
+  persistenceWarning: string | null;
 };
 
 const CartContext = createContext<CartContextValue | undefined>(undefined);
-const storageKey = 'shopflow_cart';
-
 export function CartProvider({ children }: { children: React.ReactNode }) {
-  const [items, setItems] = useState<CartItem[]>([]);
+  const [state, setState] = useState(loadCart);
+  const savedRevision = useRef(0);
+  const { items } = state;
 
   useEffect(() => {
-    const raw = localStorage.getItem(storageKey);
-    if (raw) {
-      try {
-        setItems(JSON.parse(raw));
-      } catch {
-        setItems([]);
-      }
+    if (state.memoryOnly || state.revision === savedRevision.current) return;
+    try {
+      localStorage.setItem(cartStorageKey, JSON.stringify(state.items));
+      savedRevision.current = state.revision;
+    } catch {
+      setState((current) => ({
+        ...current,
+        memoryOnly: true,
+        warning: 'Your cart could not be saved. Changes in this tab will be lost when you close or reload it; the previous saved cart has been left unchanged.',
+      }));
     }
-  }, []);
+  }, [state]);
 
-  useEffect(() => {
-    localStorage.setItem(storageKey, JSON.stringify(items));
-  }, [items]);
+  function changeItems(update: (previous: CartItem[]) => CartItem[]) {
+    setState((current) => {
+      const next = update(current.items);
+      if (next === current.items || !validCart(next)) return current;
+      return { ...current, items: next, revision: current.revision + 1 };
+    });
+  }
 
   const value = useMemo<CartContextValue>(() => ({
     items,
+    persistenceWarning: state.warning,
     addItem(product, quantity = 1) {
-      setItems((prev) => {
+      if (!validProduct(product) || product.stock === 0 || !Number.isSafeInteger(quantity) || quantity <= 0) return;
+      changeItems((prev) => {
         const existing = prev.find((item) => item.product.id === product.id);
         if (existing) {
           return prev.map((item) =>
             item.product.id === product.id
-              ? { ...item, quantity: Math.min(item.quantity + quantity, product.stock) }
+              ? { product, quantity: Math.min(item.quantity + quantity, product.stock) }
               : item,
           );
         }
@@ -48,10 +59,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       });
     },
     removeItem(productId) {
-      setItems((prev) => prev.filter((item) => item.product.id !== productId));
+      changeItems((prev) => prev.filter((item) => item.product.id !== productId));
     },
     updateQuantity(productId, quantity) {
-      setItems((prev) =>
+      if (!Number.isSafeInteger(quantity) || quantity <= 0) return;
+      changeItems((prev) =>
         prev
           .map((item) =>
             item.product.id === productId
@@ -62,11 +74,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       );
     },
     clear() {
-      setItems([]);
+      changeItems(() => []);
     },
     count: items.reduce((sum, item) => sum + item.quantity, 0),
     subtotal: items.reduce((sum, item) => sum + item.product.price * item.quantity, 0),
-  }), [items]);
+  }), [items, state.warning]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

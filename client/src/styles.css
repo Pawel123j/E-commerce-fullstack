@@ -253,6 +253,8 @@ img { display: block; max-width: 100%; }
 }
 .simple-table th { color: var(--muted); font-weight: 600; }
 .error-text { color: var(--danger); }
+.storage-warnings { margin-top: 1rem; padding: 0.75rem 1rem; border: 2px solid currentColor; border-radius: 0.5rem; }
+.storage-warnings p { margin: 0.5rem 0; }
 .success-text { color: var(--success); }
 .auth-card { display: grid; gap: 12px; }
 

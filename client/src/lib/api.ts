@@ -6,10 +6,19 @@ export const api = axios.create({
   baseURL,
 });
 
+let sessionToken: string | null = null;
+
+// The provider owns the session. A failed storage operation must not revive an
+// old token on the next request, or break requests while signing in in memory.
+export function setApiToken(token: string | null) {
+  sessionToken = token;
+}
+
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('shopflow_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  if (sessionToken) {
+    config.headers.Authorization = `Bearer ${sessionToken}`;
+  } else {
+    delete config.headers.Authorization;
   }
   return config;
 });

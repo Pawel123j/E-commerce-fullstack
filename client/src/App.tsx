@@ -8,6 +8,19 @@ import { RegisterPage } from './pages/RegisterPage';
 import { AccountPage } from './pages/AccountPage';
 import { AdminPage } from './pages/AdminPage';
 import { useAuth } from './state/AuthContext';
+import { useCart } from './state/CartContext';
+
+function StorageWarnings() {
+  const { persistenceWarning: authWarning } = useAuth();
+  const { persistenceWarning: cartWarning } = useCart();
+  if (!authWarning && !cartWarning) return null;
+  return (
+    <aside className="container storage-warnings" aria-label="Browser storage warnings" role="status">
+      {authWarning ? <p>{authWarning}</p> : null}
+      {cartWarning ? <p>{cartWarning}</p> : null}
+    </aside>
+  );
+}
 
 function Header() {
   const { user, logout } = useAuth();
@@ -57,6 +70,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <Header />
+      <StorageWarnings />
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/products" element={<ProductsPage />} />
