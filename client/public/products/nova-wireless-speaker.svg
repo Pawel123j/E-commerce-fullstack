@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600" fill="none">
+  <defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#fff0dc"/><stop offset="1" stop-color="#f1bd83"/></linearGradient><linearGradient id="body" x2="1" y2="1"><stop stop-color="#50505f"/><stop offset="1" stop-color="#242433"/></linearGradient></defs>
+  <rect width="800" height="600" rx="36" fill="url(#bg)"/><circle cx="644" cy="135" r="114" fill="#fff" fill-opacity=".36"/><circle cx="128" cy="450" r="128" fill="#e39d61" fill-opacity=".23"/>
+  <rect x="216" y="169" width="368" height="275" rx="118" fill="url(#body)"/><rect x="239" y="192" width="322" height="229" rx="98" stroke="#888797" stroke-opacity=".6" stroke-width="3"/>
+  <circle cx="400" cy="306" r="74" fill="#30303f" stroke="#9997a2" stroke-width="5"/><circle cx="400" cy="306" r="49" fill="#434352" stroke="#b8b5c2" stroke-opacity=".65" stroke-width="3"/><circle cx="400" cy="306" r="16" fill="#767583"/>
+  <path d="M281 457h238" stroke="#c4783c" stroke-width="9" stroke-linecap="round"/><circle cx="326" cy="457" r="5" fill="#f6d09c"/><circle cx="400" cy="457" r="5" fill="#f6d09c"/><circle cx="474" cy="457" r="5" fill="#f6d09c"/>
+  <text x="400" y="544" text-anchor="middle" font-family="Arial,sans-serif" font-size="19" font-weight="700" letter-spacing="5" fill="#87552f">NOVA SOUND</text>
+</svg>

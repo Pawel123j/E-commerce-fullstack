@@ -39,7 +39,7 @@ model Product {
   name        String
   slug        String    @unique
   description String
-  price       Float
+  price       Int
   imageUrl    String
   stock       Int       @default(0)
   featured    Boolean   @default(false)
@@ -53,8 +53,8 @@ model Coupon {
   id        Int        @id @default(autoincrement())
   code      String     @unique
   type      CouponType
-  value     Float
-  minTotal  Float      @default(0)
+  value     Int
+  minTotal  Int      @default(0)
   active    Boolean    @default(true)
   createdAt DateTime   @default(now())
 }
@@ -63,10 +63,10 @@ model Order {
   id              Int         @id @default(autoincrement())
   userId          Int
   user            User        @relation(fields: [userId], references: [id])
-  status          String      @default("PAID")
-  subtotal        Float
-  discount        Float       @default(0)
-  total           Float
+  status          String      @default("DEMO_SIMULATED")
+  subtotal        Int
+  discount        Int       @default(0)
+  total           Int
   couponCode      String?
   shippingName    String
   shippingEmail   String
@@ -82,7 +82,7 @@ model OrderItem {
   productId   Int
   product     Product @relation(fields: [productId], references: [id])
   productName String
-  unitPrice   Float
+  unitPrice   Int
   quantity    Int
-  total       Float
+  total       Int
 }

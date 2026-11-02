@@ -26,15 +26,15 @@ export function HomePage() {
               <Link to="/admin" className="button secondary">Admin preview</Link>
             </div>
             <div className="stats-grid">
-              <div className="stat-card"><strong>12+</strong><span>products seeded</span></div>
+              <div className="stat-card"><strong>6</strong><span>products seeded</span></div>
               <div className="stat-card"><strong>JWT</strong><span>auth included</span></div>
               <div className="stat-card"><strong>SQLite</strong><span>easy local start</span></div>
             </div>
           </div>
           <div className="hero-panel">
             <img
-              src="https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=1200&q=80"
-              alt="Hero"
+              src="/products/frame-4k-monitor.svg"
+              alt="Illustration of the Frame 4K Monitor demo product"
             />
           </div>
         </div>

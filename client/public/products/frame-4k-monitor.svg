@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600" fill="none">
+  <defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#dff4fb"/><stop offset="1" stop-color="#a8d4e6"/></linearGradient><linearGradient id="screen" x2="1" y2="1"><stop stop-color="#455de0"/><stop offset=".52" stop-color="#68c4d4"/><stop offset="1" stop-color="#d9f4d1"/></linearGradient></defs>
+  <rect width="800" height="600" rx="36" fill="url(#bg)"/><circle cx="116" cy="125" r="83" fill="#fff" fill-opacity=".4"/><circle cx="694" cy="462" r="140" fill="#fff" fill-opacity=".28"/>
+  <rect x="147" y="114" width="506" height="315" rx="26" fill="#202832"/><rect x="164" y="131" width="472" height="281" rx="14" fill="url(#screen)"/>
+  <path d="M164 352c62-109 128-117 186-58 54 56 92 45 129-10 44-65 92-91 157-83v211H164V352Z" fill="#fff" fill-opacity=".23"/><circle cx="531" cy="203" r="47" fill="#fff" fill-opacity=".4"/>
+  <path d="M369 429h62v59h-62z" fill="#59646b"/><path d="M319 492h162l30 25H289l30-25Z" fill="#3d4851"/><path d="M197 436h406" stroke="#f5ffff" stroke-opacity=".75" stroke-width="3"/>
+  <text x="400" y="562" text-anchor="middle" font-family="Arial,sans-serif" font-size="19" font-weight="700" letter-spacing="5" fill="#365b6b">FRAME · 4K DISPLAY</text>
+</svg>

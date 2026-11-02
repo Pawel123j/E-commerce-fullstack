@@ -4,6 +4,9 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
+  if (await prisma.user.count() || await prisma.product.count() || await prisma.order.count()) {
+    throw new Error('Demo seed requires an empty database. Existing records were left unchanged.');
+  }
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
   await prisma.coupon.deleteMany();
@@ -48,8 +51,8 @@ async function main() {
         name: 'Auralux Pro Headphones',
         slug: 'auralux-pro-headphones',
         description: 'Noise cancelling headphones with a clean premium vibe.',
-        price: 499,
-        imageUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=1200&q=80',
+        price: 49900,
+        imageUrl: '/products/auralux-pro-headphones.svg',
         stock: 18,
         featured: true,
         categoryId: audio.id,
@@ -58,8 +61,8 @@ async function main() {
         name: 'Pulse Smartwatch X',
         slug: 'pulse-smartwatch-x',
         description: 'Sharp display, sporty strap and elegant everyday design.',
-        price: 799,
-        imageUrl: 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=1200&q=80',
+        price: 79900,
+        imageUrl: '/products/pulse-smartwatch-x.svg',
         stock: 11,
         featured: true,
         categoryId: electronics.id,
@@ -68,8 +71,8 @@ async function main() {
         name: 'Nova Wireless Speaker',
         slug: 'nova-wireless-speaker',
         description: 'Compact speaker with warm sound and modern shape.',
-        price: 349,
-        imageUrl: 'https://images.unsplash.com/photo-1507878866276-a947ef722fee?auto=format&fit=crop&w=1200&q=80',
+        price: 34900,
+        imageUrl: '/products/nova-wireless-speaker.svg',
         stock: 21,
         featured: true,
         categoryId: audio.id,
@@ -78,8 +81,8 @@ async function main() {
         name: 'Orbit Mechanical Keyboard',
         slug: 'orbit-mechanical-keyboard',
         description: 'Smooth switches, compact footprint and sleek desk look.',
-        price: 429,
-        imageUrl: 'https://images.unsplash.com/photo-1511467687858-23d96c32e4ae?auto=format&fit=crop&w=1200&q=80',
+        price: 42900,
+        imageUrl: '/products/orbit-mechanical-keyboard.svg',
         stock: 9,
         featured: false,
         categoryId: desk.id,
@@ -88,8 +91,8 @@ async function main() {
         name: 'Glow Desk Lamp',
         slug: 'glow-desk-lamp',
         description: 'Minimal lamp for focused work and clean lighting.',
-        price: 179,
-        imageUrl: 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1200&q=80',
+        price: 17900,
+        imageUrl: '/products/glow-desk-lamp.svg',
         stock: 24,
         featured: false,
         categoryId: desk.id,
@@ -98,8 +101,8 @@ async function main() {
         name: 'Frame 4K Monitor',
         slug: 'frame-4k-monitor',
         description: 'Modern slim monitor for productivity and creative work.',
-        price: 1299,
-        imageUrl: 'https://images.unsplash.com/photo-1527443154391-507e9dc6c5cc?auto=format&fit=crop&w=1200&q=80',
+        price: 129900,
+        imageUrl: '/products/frame-4k-monitor.svg',
         stock: 6,
         featured: true,
         categoryId: electronics.id,
@@ -111,8 +114,8 @@ async function main() {
     data: {
       code: 'WELCOME10',
       type: CouponType.PERCENT,
-      value: 10,
-      minTotal: 300,
+      value: 1000,
+      minTotal: 30000,
       active: true,
     },
   });
@@ -122,7 +125,7 @@ async function main() {
   await prisma.order.create({
     data: {
       userId: seededUser.id,
-      status: 'PAID',
+      status: 'DEMO_SIMULATED',
       subtotal: firstProduct.price,
       discount: 0,
       total: firstProduct.price,

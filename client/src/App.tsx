@@ -10,7 +10,7 @@ import { AdminPage } from './pages/AdminPage';
 import { useAuth } from './state/AuthContext';
 
 function Header() {
-  const { user, logout } = useAuth();
+  const { user, logout, sessionError, retrySession } = useAuth();
   return (
     <header className="site-header">
       <div className="container nav-row">
@@ -35,20 +35,24 @@ function Header() {
           )}
         </div>
       </div>
+      <div className="container demo-notice">Demo store · prices in PLN · simulated orders, no payment or delivery.</div>
+      {sessionError && <div className="container" role="alert">{sessionError} <button className="button secondary" onClick={retrySession}>Retry session</button></div>}
     </header>
   );
 }
 
 function ProtectedRoute({ children }: { children: React.ReactElement }) {
-  const { user, loading } = useAuth();
+  const { user, loading, sessionError } = useAuth();
   if (loading) return <div className="container section">Loading...</div>;
+  if (sessionError) return <div className="container section">Use Retry session above to continue.</div>;
   if (!user) return <Navigate to="/login" replace />;
   return children;
 }
 
 function AdminRoute({ children }: { children: React.ReactElement }) {
-  const { user, loading } = useAuth();
+  const { user, loading, sessionError } = useAuth();
   if (loading) return <div className="container section">Loading...</div>;
+  if (sessionError) return <div className="container section">Use Retry session above to continue.</div>;
   if (!user || user.role !== 'ADMIN') return <Navigate to="/" replace />;
   return children;
 }
