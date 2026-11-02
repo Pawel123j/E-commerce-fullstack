@@ -85,7 +85,13 @@ function adminOnly(req: express.Request, res: express.Response, next: express.Ne
 }
 
 function presentProduct(product: any) {
-  return { ...product, category: product.category };
+  return { ...product, price: product.price / 100, category: product.category };
+}
+
+function presentOrder(order: any) {
+  return { ...order, subtotal: order.subtotal / 100, discount: order.discount / 100,
+    total: order.total / 100, items: order.items?.map((item: any) => ({ ...item,
+      unitPrice: item.unitPrice / 100, total: item.total / 100 })) };
 }
 
 app.get('/api/health', (_req, res) => {
@@ -188,12 +194,12 @@ app.get('/api/coupons/:code', asyncHandler(async (req, res) => {
   if (!coupon || !coupon.active) {
     return res.status(404).json({ message: 'Coupon not found' });
   }
-  res.json({ coupon });
+  res.json({ coupon: { ...coupon, value: coupon.value / 100, minTotal: coupon.minTotal / 100 } });
 }));
 
 app.post('/api/orders', auth, asyncHandler(async (req, res) => {
   const schema = z.object({
-    items: z.array(z.object({ productId: z.number().int().positive(), quantity: z.number().int().min(1) })).min(1),
+    items: z.array(z.object({ productId: z.number().int().positive(), quantity: z.number().int().min(1).max(10000) })).min(1),
     couponCode: z.string().optional(),
     shippingName: z.string().min(2),
     shippingEmail: z.string().email(),
@@ -255,17 +261,19 @@ app.post('/api/orders', auth, asyncHandler(async (req, res) => {
     const coupon = await prisma.coupon.findUnique({ where: { code: parsed.data.couponCode.toUpperCase() } });
     if (coupon && coupon.active && subtotal >= coupon.minTotal) {
       couponCode = coupon.code;
-      discount = coupon.type === CouponType.PERCENT ? subtotal * (coupon.value / 100) : coupon.value;
+      discount = coupon.type === CouponType.PERCENT ? Math.floor((subtotal * coupon.value + 5000) / 10000) : coupon.value;
     }
   }
 
-  const total = Math.max(0, subtotal - discount);
+  discount = Math.min(subtotal, discount);
+  const total = subtotal - discount;
 
   try {
     const order = await prisma.$transaction(async (tx) => {
       const createdOrder = await tx.order.create({
         data: {
           userId: req.user!.id,
+          status: "DEMO_SIMULATED",
           subtotal,
           discount,
           total,
@@ -289,7 +297,7 @@ app.post('/api/orders', auth, asyncHandler(async (req, res) => {
       return createdOrder;
     });
 
-    res.status(201).json({ order });
+    res.status(201).json({ order: presentOrder(order) });
   } catch (error) {
     if (error instanceof StockConflict) {
       return res.status(409).json({ message: 'Stock changed. Please review your cart and try again.' });
@@ -304,7 +312,7 @@ app.get('/api/orders/my', auth, asyncHandler(async (req, res) => {
     include: { items: true },
     orderBy: { createdAt: 'desc' },
   });
-  res.json({ orders });
+  res.json({ orders: orders.map(presentOrder) });
 }));
 
 app.get('/api/admin/stats', auth, adminOnly, asyncHandler(async (_req, res) => {
@@ -314,7 +322,7 @@ app.get('/api/admin/stats', auth, adminOnly, asyncHandler(async (_req, res) => {
     prisma.order.findMany(),
   ]);
   const revenue = orders.reduce((sum, order) => sum + order.total, 0);
-  res.json({ stats: { products, users, orders: orders.length, revenue } });
+  res.json({ stats: { products, users, orders: orders.length, revenue: revenue / 100 } });
 }));
 
 app.get('/api/admin/products', auth, adminOnly, asyncHandler(async (_req, res) => {
@@ -330,8 +338,8 @@ app.post('/api/admin/products', auth, adminOnly, asyncHandler(async (req, res) =
     name: z.string().min(2),
     slug: z.string().min(2),
     description: z.string().min(10),
-    price: z.number().positive(),
-    imageUrl: z.string().url(),
+    price: z.number().positive().max(1000000).refine((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-7, "Use at most two decimal places"),
+    imageUrl: z.string().refine((v) => /^https?:\/\//.test(v) || /^\/products\/[a-z0-9-]+\.svg$/.test(v)),
     stock: z.number().int().min(0),
     categoryId: z.number().int().positive(),
     featured: z.boolean().default(false),
@@ -347,7 +355,7 @@ app.post('/api/admin/products', auth, adminOnly, asyncHandler(async (req, res) =
   }
 
   const product = await prisma.product.create({
-    data: parsed.data,
+    data: { ...parsed.data, price: Math.round(parsed.data.price * 100) },
     include: { category: true },
   });
   res.status(201).json({ product: presentProduct(product) });
@@ -358,7 +366,7 @@ app.get('/api/admin/orders', auth, adminOnly, asyncHandler(async (_req, res) => 
     include: { items: true },
     orderBy: { createdAt: 'desc' },
   });
-  res.json({ orders });
+  res.json({ orders: orders.map(presentOrder) });
 }));
 
 const errorHandler: express.ErrorRequestHandler = (error, _req, res, _next) => {
@@ -383,7 +391,7 @@ const isEntryPoint =
   import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (isEntryPoint) {
-  app.listen(port, () => {
+  app.listen(port, process.env.HOST || "127.0.0.1", () => {
     console.log(`ShopFlow API listening on http://localhost:${port}`);
   });
 }

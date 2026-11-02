@@ -11,7 +11,7 @@
  */
 
 import { execSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -19,6 +19,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 const workDir = mkdtempSync(join(tmpdir(), 'shopflow-test-'));
 const databaseUrl = `file:${join(workDir, 'test.db')}`;
+// Prisma's SQLite migration engine expects the target file to exist already.
+writeFileSync(join(workDir, 'test.db'), '');
 
 process.env.DATABASE_URL = databaseUrl;
 process.env.JWT_SECRET = 'test-only-secret-value';
@@ -243,11 +245,11 @@ describe('zamówienia', () => {
     const res = await request(app)
       .post('/api/orders')
       .set('Authorization', `Bearer ${customerToken}`)
-      .send({ items: [{ productId, quantity: 100_000 }], ...SHIPPING });
+      .send({ items: [{ productId, quantity: 10_000 }], ...SHIPPING });
 
     expect(res.status).toBe(400);
-    expect(res.body.items[0]).toMatchObject({ requested: 100_000 });
-    expect(res.body.items[0].available).toBeLessThan(100_000);
+    expect(res.body.items[0]).toMatchObject({ requested: 10_000 });
+    expect(res.body.items[0].available).toBeLessThan(10_000);
   });
 
   it('nie zdejmuje stanu magazynowego przy odrzuconym zamówieniu', async () => {

@@ -12,7 +12,7 @@ export function AdminPage() {
     slug: 'studio-monitor-x',
     description: 'Clean admin create flow for adding products.',
     price: '699',
-    imageUrl: 'https://images.unsplash.com/photo-1545454675-3531b543be5d?auto=format&fit=crop&w=1200&q=80',
+    imageUrl: '/products/orbit-mechanical-keyboard.svg',
     stock: '9',
     categoryId: '1',
     featured: true,

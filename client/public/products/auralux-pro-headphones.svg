@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600" fill="none">
+  <defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#e8eaff"/><stop offset="1" stop-color="#b8c5f8"/></linearGradient><linearGradient id="cup" x2="1" y2="1"><stop stop-color="#272b42"/><stop offset="1" stop-color="#0d1020"/></linearGradient></defs>
+  <rect width="800" height="600" rx="36" fill="url(#bg)"/><circle cx="650" cy="116" r="80" fill="#fff" fill-opacity=".35"/><circle cx="135" cy="500" r="148" fill="#94a3e7" fill-opacity=".34"/>
+  <path d="M252 333v-49c0-104 66-179 148-179s148 75 148 179v49" stroke="#30344c" stroke-width="42" stroke-linecap="round"/>
+  <rect x="208" y="294" width="116" height="191" rx="50" fill="url(#cup)"/><rect x="476" y="294" width="116" height="191" rx="50" fill="url(#cup)"/>
+  <rect x="225" y="316" width="22" height="147" rx="11" fill="#848ba8"/><rect x="493" y="316" width="22" height="147" rx="11" fill="#848ba8"/><path d="M305 413h190" stroke="#747da6" stroke-width="10" stroke-linecap="round"/>
+  <text x="400" y="552" text-anchor="middle" font-family="Arial,sans-serif" font-size="19" font-weight="700" letter-spacing="5" fill="#3a405b">AURALUX AUDIO</text>
+</svg>

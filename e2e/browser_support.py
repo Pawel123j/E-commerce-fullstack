@@ -19,7 +19,7 @@ def static_site(directory):
         def log_message(self, *args):
             pass
         def do_GET(self):
-            if not Path(self.translate_path(self.path)).exists() and '.' not in self.path.rsplit('/', 1)[-1]:
+            if not Path(self.translate_path(self.path)).is_file() and '.' not in self.path.rsplit('/', 1)[-1]:
                 self.path = '/index.html'
             super().do_GET()
     server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
@@ -59,7 +59,7 @@ def application(name, command, cwd, url, env=None):
 @contextlib.contextmanager
 def browser():
     with sync_playwright() as p:
-        instance = p.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH'), headless=True, args=['--no-sandbox'])
+        instance = p.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH'), headless=True)
         try:
             yield instance
         finally:

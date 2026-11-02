@@ -14,6 +14,7 @@ SERVER = REPO / 'server'
 
 def test_checkout_uses_real_coupon_and_persists_order():
     with tempfile.TemporaryDirectory(prefix='shopflow-e2e-') as temp:
+        Path(temp, 'shop.db').touch()
         env = {**os.environ, 'DATABASE_URL': f'file:{temp}/shop.db', 'RUST_LOG': 'info',
                'JWT_SECRET': 'isolated-browser-test-secret-not-production', 'PORT': '18311'}
         with (ROOT/'logs'/'shopflow-e2e-setup.log').open('w') as log:
@@ -22,7 +23,7 @@ def test_checkout_uses_real_coupon_and_persists_order():
                         ['node','--import','tsx','prisma/seed.ts']):
                 subprocess.run(cmd, cwd=SERVER, env=env, check=True, stdout=log, stderr=log)
             subprocess.run(['node','--input-type=module','-e',
-                "import {PrismaClient} from '@prisma/client'; const p=new PrismaClient(); await p.coupon.create({data:{code:'SAVE25',type:'FIXED',value:25,minTotal:100}}); await p.$disconnect();"],
+                "import {PrismaClient} from '@prisma/client'; const p=new PrismaClient(); await p.coupon.create({data:{code:'SAVE25',type:'FIXED',value:2500,minTotal:10000}}); await p.$disconnect();"],
                 cwd=SERVER, env=env, check=True, stdout=log, stderr=log)
         with static_site(REPO / 'client/dist') as url:
             env['CLIENT_URL'] = url
@@ -30,6 +31,10 @@ def test_checkout_uses_real_coupon_and_persists_order():
                 page = b.new_page(viewport={'width':1280,'height':900})
                 errors=[]
                 page.on('pageerror',lambda e: errors.append(str(e)))
+                page.goto(url+'/products')
+                expect(page.get_by_role('heading', name='Catalog', exact=True)).to_be_visible()
+                expect(page.locator('.product-image').first).to_have_js_property('naturalWidth', 800)
+                page.screenshot(path=str(REPO/'docs'/'screenshots'/'browser-catalog.png'), full_page=True)
                 page.goto(url+'/register')
                 assert_accessible(page, REPO, 'register')
                 page.get_by_placeholder('Full name', exact=True).fill('Browser Customer')
@@ -47,11 +52,12 @@ def test_checkout_uses_real_coupon_and_persists_order():
                 expect(page.locator('.summary-row.total')).to_have_text('Total474.00 zł')
                 assert_accessible(page, REPO, 'checkout')
                 page.get_by_placeholder('Address',exact=True).fill('Test Street 12, Warsaw')
-                page.get_by_role('button',name='Place order',exact=True).click()
+                page.get_by_role('button',name='Place demo order',exact=True).click()
                 expect(page).to_have_url(url+'/account')
                 expect(page.get_by_text('474.00 zł',exact=True)).to_be_visible()
                 page.reload()
                 expect(page.get_by_text('474.00 zł',exact=True)).to_be_visible()
                 assert_accessible(page, REPO, 'account')
                 page.screenshot(path=str(ROOT/'logs'/'shopflow-checkout.png'))
+                page.screenshot(path=str(REPO/'docs'/'screenshots'/'browser-checkout.png'), full_page=True)
                 assert not errors, errors
