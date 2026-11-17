@@ -39,7 +39,7 @@ const jwtSecret = (() => {
 const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
 
 app.use(cors({ origin: clientUrl }));
-app.use(express.json());
+app.use(express.json({ limit: '100kb' }));
 
 type RequestUser = { id: number; role: Role; email: string };
 
@@ -56,6 +56,8 @@ function asyncHandler(handler: (req: express.Request, res: express.Response) => 
   return (req, res, next) => { Promise.resolve(handler(req, res)).catch(next); };
 }
 
+// Prisma Int columns store signed 32-bit values, including money in cents.
+const MAX_DATABASE_INT = 2_147_483_647;
 class StockConflict extends Error {}
 
 function signToken(user: RequestUser) {
@@ -255,6 +257,11 @@ app.post('/api/orders', auth, asyncHandler(async (req, res) => {
     };
   });
 
+  if (!Number.isSafeInteger(subtotal) || subtotal > MAX_DATABASE_INT ||
+      orderItemsInput.some(item => !Number.isSafeInteger(item.total) || item.total < 0 || item.total > MAX_DATABASE_INT)) {
+    return res.status(400).json({ message: 'Order exceeds the supported subtotal limit of 21,474,836.47 PLN before discounts.' });
+  }
+
   let discount = 0;
   let couponCode: string | undefined;
   if (parsed.data.couponCode) {
@@ -340,7 +347,7 @@ app.post('/api/admin/products', auth, adminOnly, asyncHandler(async (req, res) =
     description: z.string().min(10),
     price: z.number().positive().max(1000000).refine((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-7, "Use at most two decimal places"),
     imageUrl: z.string().refine((v) => /^https?:\/\//.test(v) || /^\/products\/[a-z0-9-]+\.svg$/.test(v)),
-    stock: z.number().int().min(0),
+    stock: z.number().int().min(0).max(MAX_DATABASE_INT),
     categoryId: z.number().int().positive(),
     featured: z.boolean().default(false),
   });
@@ -376,6 +383,19 @@ const errorHandler: express.ErrorRequestHandler = (error, _req, res, _next) => {
   }
   if (error instanceof SyntaxError && 'status' in error && error.status === 400) {
     return res.status(400).json({ message: 'Invalid JSON payload' });
+  }
+  // Preserve body-parser's client-error statuses without exposing raw input or
+  // decompression details. These failures must not become generic HTTP 500s.
+  if (error?.type === 'entity.too.large') {
+    return res.status(413).json({ message: 'Request body too large' });
+  }
+  if (error?.type === 'encoding.unsupported' || error?.type === 'charset.unsupported') {
+    return res.status(415).json({ message: 'Unsupported request encoding' });
+  }
+  if (error?.type === 'entity.parse.failed' || error?.type === 'request.size.invalid' ||
+      error?.type === 'request.aborted' ||
+      (error?.status === 400 && ['Z_DATA_ERROR', 'Z_BUF_ERROR'].includes(error?.code))) {
+    return res.status(400).json({ message: 'Invalid request body' });
   }
   return res.status(500).json({ message: 'Internal server error' });
 };
