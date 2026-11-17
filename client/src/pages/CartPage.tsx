@@ -7,7 +7,7 @@ import { useCart } from '../state/CartContext';
 type Coupon = { code: string; type: 'PERCENT' | 'FIXED'; value: number; minTotal: number; active: boolean };
 
 export function CartPage() {
-  const { items, removeItem, updateQuantity, subtotal, clear, storageError } = useCart();
+  const { items, removeItem, updateQuantity, subtotal, clear } = useCart();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [couponCode, setCouponCode] = useState('WELCOME10');
@@ -76,7 +76,6 @@ export function CartPage() {
         </div>
       </div>
 
-      {storageError && <p role="status">Browser storage is unavailable. Your basket works for this visit but may not survive a reload.</p>}
       <form className="checkout-layout" onSubmit={(event) => { event.preventDefault(); void submitOrder(); }}>
         <div className="stack-list">
           {items.length === 0 ? <div className="card">Cart is empty.</div> : null}
@@ -92,7 +91,7 @@ export function CartPage() {
                     aria-label={`Quantity for ${item.product.name}`}
                     type="number"
                     min={1}
-                    max={item.product.stock}
+                    max={Math.min(item.product.stock, 10000)}
                     value={item.quantity}
                     onChange={(e) => updateQuantity(item.product.id, Number(e.target.value))}
                   />

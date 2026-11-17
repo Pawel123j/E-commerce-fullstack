@@ -1,87 +1,84 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { readStorage, writeStorage } from '../lib/storage';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { CartItem, Product } from '../types';
+import { cartStorageKey, loadCart, validCart, validProduct } from './cartStorage';
 
 type CartContextValue = {
   items: CartItem[];
-  storageError: boolean;
   addItem: (product: Product, quantity?: number) => void;
   removeItem: (productId: number) => void;
   updateQuantity: (productId: number, quantity: number) => void;
   clear: () => void;
   count: number;
   subtotal: number;
+  persistenceWarning: string | null;
 };
 
 const CartContext = createContext<CartContextValue | undefined>(undefined);
-const storageKey = 'shopflow_cart';
-
-function loadCart(): CartItem[] {
-  try {
-    const stored = JSON.parse(readStorage(storageKey) || 'null');
-    const raw = Array.isArray(stored) ? stored : stored?.version === 1 ? stored.items : [];
-    if (!Array.isArray(raw)) return [];
-    const seen = new Set<number>();
-    return raw.filter((item): item is CartItem => {
-      const p = item?.product;
-      if (!p || !Number.isSafeInteger(p.id) || p.id < 1 || seen.has(p.id) ||
-          !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.quantity > 10000 ||
-          !Number.isSafeInteger(p.stock) || p.stock < item.quantity ||
-          !Number.isFinite(p.price) || p.price <= 0 || p.price > 1000000 ||
-          !['name', 'slug', 'description', 'imageUrl'].every((k) => typeof p[k] === 'string') ||
-          !p.category || typeof p.category.name !== 'string') return false;
-      seen.add(p.id);
-      return true;
-    });
-  } catch { return []; }
-}
-
 export function CartProvider({ children }: { children: React.ReactNode }) {
-  const [items, setItems] = useState<CartItem[]>(loadCart);
-  const [storageError, setStorageError] = useState(false);
+  const [state, setState] = useState(loadCart);
+  const savedRevision = useRef(0);
+  const { items } = state;
 
   useEffect(() => {
-    setStorageError(!writeStorage(storageKey, JSON.stringify({ version: 1, items })));
-  }, [items]);
+    if (state.memoryOnly || state.revision === savedRevision.current) return;
+    try {
+      localStorage.setItem(cartStorageKey, JSON.stringify({ version: 1, items: state.items }));
+      savedRevision.current = state.revision;
+    } catch {
+      setState((current) => ({
+        ...current,
+        memoryOnly: true,
+        warning: 'Your cart could not be saved. Changes in this tab will be lost when you close or reload it; the previous saved cart has been left unchanged.',
+      }));
+    }
+  }, [state]);
+
+  function changeItems(update: (previous: CartItem[]) => CartItem[]) {
+    setState((current) => {
+      const next = update(current.items);
+      if (next === current.items || !validCart(next)) return current;
+      return { ...current, items: next, revision: current.revision + 1 };
+    });
+  }
 
   const value = useMemo<CartContextValue>(() => ({
     items,
-    storageError,
+    persistenceWarning: state.warning,
     addItem(product, quantity = 1) {
-      if (!Number.isSafeInteger(quantity) || quantity < 1 || product.stock < 1) return;
-      setItems((prev) => {
+      if (!validProduct(product) || product.stock === 0 || !Number.isSafeInteger(quantity) || quantity <= 0) return;
+      changeItems((prev) => {
         const existing = prev.find((item) => item.product.id === product.id);
         if (existing) {
           return prev.map((item) =>
             item.product.id === product.id
-              ? { ...item, quantity: Math.min(item.quantity + quantity, product.stock) }
+              ? { product, quantity: Math.min(item.quantity + quantity, product.stock, 10000) }
               : item,
           );
         }
-        return [...prev, { product, quantity: Math.min(quantity, product.stock) }];
+        return [...prev, { product, quantity: Math.min(quantity, product.stock, 10000) }];
       });
     },
     removeItem(productId) {
-      setItems((prev) => prev.filter((item) => item.product.id !== productId));
+      changeItems((prev) => prev.filter((item) => item.product.id !== productId));
     },
     updateQuantity(productId, quantity) {
-      if (!Number.isSafeInteger(quantity)) return;
-      setItems((prev) =>
+      if (!Number.isSafeInteger(quantity) || quantity <= 0) return;
+      changeItems((prev) =>
         prev
           .map((item) =>
             item.product.id === productId
-              ? { ...item, quantity: Math.max(1, Math.min(quantity, item.product.stock)) }
+              ? { ...item, quantity: Math.max(1, Math.min(quantity, item.product.stock, 10000)) }
               : item,
           )
           .filter((item) => item.quantity > 0),
       );
     },
     clear() {
-      setItems([]);
+      changeItems(() => []);
     },
     count: items.reduce((sum, item) => sum + item.quantity, 0),
     subtotal: items.reduce((sum, item) => sum + Math.round(item.product.price * 100) * item.quantity, 0) / 100,
-  }), [items, storageError]);
+  }), [items, state.warning]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }
