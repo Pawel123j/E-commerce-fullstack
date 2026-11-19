@@ -2,6 +2,8 @@ import 'dotenv/config';
 import { pathToFileURL } from 'node:url';
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import { rateLimit } from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { PrismaClient, Prisma, CouponType, Role } from '@prisma/client';
@@ -38,6 +40,8 @@ const jwtSecret = (() => {
 })();
 const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
 
+// EC-02: standardowe nagłówki bezpieczeństwa (CSP dla odpowiedzi API, nosniff, HSTS, brak X-Powered-By).
+app.use(helmet());
 app.use(cors({ origin: clientUrl }));
 app.use(express.json());
 
@@ -58,8 +62,11 @@ function asyncHandler(handler: (req: express.Request, res: express.Response) => 
 
 class StockConflict extends Error {}
 
+// EC-01: krótszy czas życia tokenu (wcześniej 7 dni) i jawnie przypięty algorytm.
+const TOKEN_TTL = '1d';
+
 function signToken(user: RequestUser) {
-  return jwt.sign(user, jwtSecret, { expiresIn: '7d' });
+  return jwt.sign(user, jwtSecret, { expiresIn: TOKEN_TTL, algorithm: 'HS256' });
 }
 
 function auth(req: express.Request, res: express.Response, next: express.NextFunction) {
@@ -69,7 +76,7 @@ function auth(req: express.Request, res: express.Response, next: express.NextFun
   }
   const token = header.slice(7);
   try {
-    const decoded = jwt.verify(token, jwtSecret) as RequestUser;
+    const decoded = jwt.verify(token, jwtSecret, { algorithms: ['HS256'] }) as RequestUser;
     req.user = decoded;
     next();
   } catch {
@@ -77,12 +84,34 @@ function auth(req: express.Request, res: express.Response, next: express.NextFun
   }
 }
 
-function adminOnly(req: express.Request, res: express.Response, next: express.NextFunction) {
-  if (req.user?.role !== Role.ADMIN) {
-    return res.status(403).json({ message: 'Admin only' });
+// EC-01: rola jest sprawdzana w bazie przy każdym żądaniu, a nie odczytywana z tokenu —
+// odebranie uprawnień administratora (lub usunięcie konta) działa natychmiast, a nie po
+// wygaśnięciu wcześniej wydanego tokenu.
+const adminOnly: express.RequestHandler = (req, res, next) => {
+  if (!req.user) {
+    res.status(401).json({ message: 'Unauthorized' });
+    return;
   }
-  next();
-}
+  prisma.user
+    .findUnique({ where: { id: req.user.id }, select: { role: true } })
+    .then((user) => {
+      if (user?.role !== Role.ADMIN) {
+        res.status(403).json({ message: 'Admin only' });
+        return;
+      }
+      next();
+    })
+    .catch(next);
+};
+
+// EC-02: kody kuponów można było zgadywać bez ograniczeń.
+const couponLookupLimit = rateLimit({
+  limit: 30,
+  windowMs: 60 * 1000,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { message: 'Too many coupon lookups. Please try again later.' },
+});
 
 function presentProduct(product: any) {
   return { ...product, price: product.price / 100, category: product.category };
@@ -187,7 +216,7 @@ app.get('/api/products/:slug', asyncHandler(async (req, res) => {
   res.json({ product: presentProduct(product) });
 }));
 
-app.get('/api/coupons/:code', asyncHandler(async (req, res) => {
+app.get('/api/coupons/:code', couponLookupLimit, asyncHandler(async (req, res) => {
   if (typeof req.params.code !== 'string') return res.status(400).json({ message: 'Invalid coupon code' });
   const code = req.params.code.toUpperCase();
   const coupon = await prisma.coupon.findUnique({ where: { code } });
