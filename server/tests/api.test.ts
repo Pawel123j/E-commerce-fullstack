@@ -337,3 +337,51 @@ describe('panel administratora', () => {
     expect(res.status).toBe(403);
   });
 });
+
+// --- EC-01 / EC-02: regresje bezpieczeństwa ---------------------------------
+
+describe('rola i token (EC-01)', () => {
+  it('odebranie roli admina działa natychmiast, mimo ważnego tokenu', async () => {
+    const admin = await prisma.user.findUniqueOrThrow({ where: { email: ADMIN.email } });
+    await prisma.user.update({ where: { id: admin.id }, data: { role: 'USER' } });
+    try {
+      const res = await request(app).get('/api/admin/stats').set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(403);
+    } finally {
+      await prisma.user.update({ where: { id: admin.id }, data: { role: 'ADMIN' } });
+    }
+  });
+
+  it('token podpisany innym algorytmem jest odrzucany', async () => {
+    const jwt = (await import('jsonwebtoken')).default;
+    const forged = jwt.sign({ id: 1, role: 'ADMIN', email: ADMIN.email }, '', { algorithm: 'none' });
+    const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${forged}`);
+    expect(res.status).toBe(401);
+  });
+
+  it('token wygasa po dobie, nie po tygodniu', async () => {
+    const jwt = (await import('jsonwebtoken')).default;
+    const decoded = jwt.decode(adminToken) as { iat: number; exp: number };
+    expect(decoded.exp - decoded.iat).toBe(24 * 60 * 60);
+  });
+});
+
+describe('nagłówki i limity (EC-02)', () => {
+  it('odpowiedzi API mają nagłówki bezpieczeństwa i nie ujawniają Express', async () => {
+    const res = await request(app).get('/api/health');
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.headers['content-security-policy']).toBeDefined();
+    expect(res.headers['x-powered-by']).toBeUndefined();
+  });
+
+  it('zgadywanie kodów kuponów jest ograniczone', async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 31; i += 1) {
+      statuses.push((await request(app).get(`/api/coupons/GUESS${i}`)).status);
+    }
+    // Limit 30/min na IP: najpóźniej 31. próba w oknie jest odrzucana (wcześniejsze testy
+    // mogły już zużyć część budżetu), a żadna odpowiedź nie ujawnia istnienia kuponu.
+    expect(statuses).toContain(429);
+    expect(statuses.every((s) => s === 404 || s === 429)).toBe(true);
+  });
+});
