@@ -1,17 +1,26 @@
 name: CI
 
 on:
+  # Gałęzie robocze testuje zdarzenie pull_request. Wcześniej `push` na każdej
+  # gałęzi uruchamiał ten sam zestaw drugi raz (w tym job z Playwrightem).
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
 
 permissions:
   contents: read
 
+# Nowy push do PR-a anuluje przebieg, który i tak jest już nieaktualny.
+# Przebiegi na main nie są anulowane, żeby każdy commit miał pełny wynik.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   server:
     name: Backend (build + testy)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: server
@@ -51,6 +60,7 @@ jobs:
   client:
     name: Frontend (typecheck + build)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: client
@@ -79,6 +89,7 @@ jobs:
   browser:
     name: Checkout browser regression
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -113,8 +124,12 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Browser regression tests
         run: python -m pytest -q e2e --junitxml=e2e/artifacts/results.xml
+      # Artefakty tylko przy porażce i z krótką retencją: przy `always()` każdy
+      # przebieg zostawiał ~250 KB na 90 dni (16 artefaktów w jedno popołudnie),
+      # a konto ma ograniczony budżet storage w Actions.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: always()
+        if: failure()
         with:
           name: browser-test-results
           path: e2e/artifacts/
+          retention-days: 7
