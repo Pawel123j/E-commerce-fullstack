@@ -6,11 +6,12 @@ import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import { PrismaClient, Prisma, CouponType, Role } from '@prisma/client';
+import { Prisma, CouponType, Role } from '@prisma/client';
+import { createPrismaClient } from './prismaClient.js';
 import { z } from 'zod';
 import { authRateLimit } from './authRateLimit.js';
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 const app = express();
 const port = Number(process.env.PORT || 3000);
 /**
