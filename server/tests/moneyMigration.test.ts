@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { PrismaClient } from '@prisma/client';
+import { createPrismaClient } from '../src/prismaClient.js';
 import { expect, it } from 'vitest';
 
 it('migrates a populated historical database without losing its orders, relations or coupon units', async () => {
@@ -27,7 +27,7 @@ it('migrates a populated historical database without losing its orders, relation
   } finally {
     legacy.close();
   }
-  const prisma = new PrismaClient({ datasourceUrl: env.DATABASE_URL });
+  const prisma = createPrismaClient(env.DATABASE_URL);
   const command = (...args: string[]) => execFileSync(process.execPath, ['node_modules/prisma/build/index.js', ...args], {
     cwd: server, env, stdio: 'pipe', timeout: 30_000,
   });

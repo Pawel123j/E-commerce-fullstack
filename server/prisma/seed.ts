@@ -1,7 +1,8 @@
-import { PrismaClient, Role, CouponType } from '@prisma/client';
+import { Role, CouponType } from '@prisma/client';
+import { createPrismaClient } from '../src/prismaClient.js';
 import bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 async function main() {
   if (await prisma.user.count() || await prisma.product.count() || await prisma.order.count()) {

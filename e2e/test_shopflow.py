@@ -25,7 +25,7 @@ def shopflow_site():
                         ['node','--import','tsx','prisma/seed.ts']):
                 subprocess.run(cmd, cwd=SERVER, env=env, check=True, stdout=log, stderr=log)
             subprocess.run(['node','--input-type=module','-e',
-                "import {PrismaClient} from '@prisma/client'; const p=new PrismaClient(); await p.coupon.create({data:{code:'SAVE25',type:'FIXED',value:2500,minTotal:10000}}); await p.$disconnect();"],
+                "import {createPrismaClient} from './dist/prismaClient.js'; const p=createPrismaClient(); await p.coupon.create({data:{code:'SAVE25',type:'FIXED',value:2500,minTotal:10000}}); await p.$disconnect();"],
                 cwd=SERVER, env=env, check=True, stdout=log, stderr=log)
         with static_site(REPO / 'client/dist') as url:
             env['CLIENT_URL'] = url
