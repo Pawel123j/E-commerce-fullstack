@@ -273,6 +273,17 @@ describe('zamówienia', () => {
     expect(res.status).toBe(400);
   });
 
+  it.each([
+    { items: null }, { items: {} }, { items: [{ productId: 1, quantity: 0 }] },
+    { items: [{ productId: 1, quantity: 1.5 }] }, { items: [{ productId: "1", quantity: 1 }] },
+  ])('odrzuca nieprawidłowe pozycje po aktualizacji Zod: %j', async ({ items }) => {
+    const response = await request(app).post('/api/orders')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ items, ...SHIPPING });
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ message: 'Invalid order payload' });
+  });
+
   it('kupon obniża sumę zamówienia', async () => {
     const withoutCoupon = await request(app)
       .post('/api/orders')
@@ -384,4 +395,55 @@ describe('nagłówki i limity (EC-02)', () => {
     expect(statuses).toContain(429);
     expect(statuses.every((s) => s === 404 || s === 429)).toBe(true);
   });
+});
+
+it.each([
+  { name: 'single line overflow', prices: [100_000_000], quantities: [22], status: 400, couponCode: 'WELCOME10' },
+  { name: 'combined subtotal overflow', prices: [100_000_000, 100_000_000], quantities: [11, 11], status: 400, couponCode: undefined },
+  { name: 'exact signed Int boundary', prices: [100_000_000, 47_483_647], quantities: [21, 1], status: 201, couponCode: undefined },
+])('handles $name without out-of-range writes', async ({ name, prices, quantities, status, couponCode }) => {
+  const category = await prisma.category.findFirstOrThrow();
+  const ids: number[] = [];
+  const ordersBefore = await prisma.order.count();
+  const itemsBefore = await prisma.orderItem.count();
+  try {
+    for (const [index, price] of prices.entries()) {
+      const product = await prisma.product.create({ data: {
+        name: `Money boundary ${index}`, slug: `${name.replaceAll(' ', '-')}-${index}`,
+        description: 'Integer money boundary regression', price,
+        imageUrl: '/products/auralux-pro-headphones.svg', stock: 100, categoryId: category.id,
+      } });
+      ids.push(product.id);
+    }
+    const response = await request(app).post('/api/orders')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ ...SHIPPING, couponCode, items: ids.map((id, index) => ({ productId: id, quantity: quantities[index] })) });
+    expect(response.status).toBe(status);
+    if (status === 400) {
+      expect(response.body.message).toMatch(/supported subtotal limit/);
+      expect(await prisma.order.count()).toBe(ordersBefore);
+      expect(await prisma.orderItem.count()).toBe(itemsBefore);
+      const products = await prisma.product.findMany({ where: { id: { in: ids } } });
+      expect(products.every(product => product.stock === 100)).toBe(true);
+    } else {
+      const saved = await prisma.order.findUniqueOrThrow({ where: { id: response.body.order.id } });
+      expect(saved.subtotal).toBe(2_147_483_647);
+      expect(saved.total).toBe(2_147_483_647);
+      expect(response.body.order.total).toBe(21_474_836.47);
+    }
+  } finally {
+    await prisma.order.deleteMany({ where: { items: { some: { productId: { in: ids } } } } });
+    await prisma.product.deleteMany({ where: { id: { in: ids } } });
+  }
+});
+
+it('rejects stock beyond the database integer range without creating a product', async () => {
+  const category = await prisma.category.findFirstOrThrow();
+  const before = await prisma.product.count();
+  const response = await request(app).post('/api/admin/products')
+    .set('Authorization', `Bearer ${adminToken}`)
+    .send({ name: 'Overflow stock', slug: 'overflow-stock', description: 'Stock boundary regression',
+      price: 10, imageUrl: '/products/example.svg', stock: 2_147_483_648, categoryId: category.id });
+  expect(response.status).toBe(400);
+  expect(await prisma.product.count()).toBe(before);
 });
